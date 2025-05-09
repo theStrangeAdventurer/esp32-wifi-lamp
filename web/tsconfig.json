@@ -1,0 +1,13 @@
+{
+  "compilerOptions": {
+    "jsx": "react",
+    "strict": true,
+    "moduleResolution": "bundler",
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true,
+    "lib": ["dom", "dom.iterable", "esnext"]
+  },
+  "include": ["src/**/*"],
+  "exclude": ["node_modules"]
+}
