@@ -12,120 +12,16 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+
 #define BUFFER_SIZE 1024
-#define SCRATCH_BUFSIZE (8192)            // Буфер для чтения данных
-#define MIN(a, b) ((a) < (b) ? (a) : (b)) // Добавляем макрос MIN
+#define SCRATCH_BUFSIZE (8192)  // Буфер для чтения данных
+#define UPLOAD_BUFFER_SIZE 4096 // Уменьшаем буфер до 4KB
+#define MIN(a, b)                                                              \
+  ((a) < (b) ? (a) : (b)) // Добавляем макрос MIN
+                          //
 static const char *TAG = "http_server";
 
-// Функция для определения MIME-типа по расширению файла
-static const char *get_mime_type(const char *path) {
-  if (strstr(path, ".html"))
-    return "text/html";
-  if (strstr(path, ".css"))
-    return "text/css";
-  if (strstr(path, ".js"))
-    return "application/javascript";
-  if (strstr(path, ".png"))
-    return "image/png";
-  if (strstr(path, ".jpg"))
-    return "image/jpeg";
-  return "application/octet-stream"; // По умолчанию
-}
-
-static void send_file(int client_socket, const char *path) {
-  // char file_path[128];
-  // FILE *fd = NULL;
-  // struct stat file_stat;
-  // snprintf(file_path, sizeof(file_path), "/spiffs%s", path);
-  //
-  // // Проверяем существование файла
-  // if (stat(file_path, &file_stat) == -1) {
-  //   ESP_LOGE(TAG, "Failed to stat file: %s", file_path);
-  //   // Отправляем HTTP 404
-  //   sprintf(header,
-  //           "HTTP/1.1 404 Not Found\r\nContent-Length: 9\r\n\r\nNot Found");
-  //   write(client_socket, header, strlen(header));
-  //   return;
-  // }
-  //
-  // // Проверяем, что это обычный файл
-  // if (!S_ISREG(file_stat.st_mode)) {
-  //   ESP_LOGE(TAG, "Path is not a file: %s", file_path);
-  //   // Отправляем HTTP 404
-  //   sprintf(header,
-  //           "HTTP/1.1 404 Not Found\r\nContent-Length: 9\r\n\r\nNot Found");
-  //   write(client_socket, header, strlen(header));
-  //   return;
-  // }
-  //
-  // // Открываем файл для чтения
-  // file = fopen(file_path, "r");
-  // if (!file) {
-  //   ESP_LOGE(TAG, "Failed to open file: %s", file_path);
-  //   // Отправляем HTTP 500
-  //   sprintf(header, "HTTP/1.1 500 Internal Server Error\r\nContent-Length: "
-  //                   "21\r\n\r\nInternal Server Error");
-  //   write(client_socket, header, strlen(header));
-  //   return;
-  // }
-  //
-  // ESP_LOGI(TAG, "Sending file: %s (%ld bytes)", file_path,
-  // file_stat.st_size);
-  //
-  // // Определяем тип содержимого по расширению файла
-  // const char *content_type = "text/plain";
-  // if (strstr(path, ".html")) {
-  //   content_type = "text/html";
-  // } else if (strstr(path, ".css")) {
-  //   content_type = "text/css";
-  // } else if (strstr(path, ".js")) {
-  //   content_type = "application/javascript";
-  // } else if (strstr(path, ".png")) {
-  //   content_type = "image/png";
-  // } else if (strstr(path, ".jpg") || strstr(path, ".jpeg")) {
-  //   content_type = "image/jpeg";
-  // } else if (strstr(path, ".ico")) {
-  //   content_type = "image/x-icon";
-  // } else if (strstr(path, ".json")) {
-  //   content_type = "application/json";
-  // }
-  //
-  // // Отправляем HTTP заголовок
-  // sprintf(header,
-  //         "HTTP/1.1 200 OK\r\nContent-Type: %s\r\nContent-Length:
-  //         %ld\r\n\r\n", content_type, file_stat.st_size);
-  // write(client_socket, header, strlen(header));
-  //
-  // // Отправляем содержимое файла
-  // while ((bytes_read = fread(buffer, 1, BUFFER_SIZE, file)) > 0) {
-  //   write(client_socket, buffer, bytes_read);
-  // }
-  //
-  // // Закрываем файл
-  // fclose(file);
-  // ESP_LOGI(TAG, "File sent successfully: %s", file_path);
-}
-
-void read_file() {
-  FILE *f = NULL;
-  // Open renamed file for reading
-  ESP_LOGI(TAG, "Reading file");
-  f = fopen("/spiffs/foo.txt", "r");
-  if (f == NULL) {
-    ESP_LOGE(TAG, "Failed to open file for reading");
-    return;
-  }
-  char line[64];
-  fgets(line, sizeof(line), f);
-  fclose(f);
-  // strip newline
-  char *pos = strchr(line, '\n');
-  if (pos) {
-    *pos = '\0';
-  }
-  ESP_LOGI(TAG, "Read from file: '%s'", line);
-}
-int check_webapp_uloaded() {
+int check_webapp_uploaded() {
   FILE *f = NULL;
   // Open renamed file for reading
   ESP_LOGI(TAG, "Reading file");
@@ -152,129 +48,239 @@ const char *default_html_response =
     "</html>";
 
 esp_err_t get_handler(httpd_req_t *req) {
-  const int is_webapp_uloaded = check_webapp_uloaded();
-  if (!is_webapp_uloaded) {
-    ESP_LOGW(TAG, "web application not yet uploaded");
-    httpd_resp_send(req, default_html_response, strlen(default_html_response));
-    return ESP_OK;
+  FILE *f = NULL;
+  uint8_t *buf = NULL;
+  esp_err_t ret = ESP_OK;
+
+  const int is_webapp_uploaded = check_webapp_uploaded();
+  if (!is_webapp_uploaded) {
+    ESP_LOGW(TAG, "Web application not yet uploaded");
+    return httpd_resp_send(req, default_html_response,
+                           strlen(default_html_response));
   }
 
-  // Если файлы загружены, можно вернуть index.html
-  FILE *f = fopen("/spiffs/index.html", "r");
-  if (f == NULL) {
+  f = fopen("/spiffs/index.html", "rb");
+  if (!f) {
+    ESP_LOGE(TAG, "Failed to open index.html");
+    ret = httpd_resp_send_500(req);
+    goto cleanup;
+  }
+
+  buf = heap_caps_malloc(SCRATCH_BUFSIZE, MALLOC_CAP_DMA);
+  if (!buf) {
+    ESP_LOGE(TAG, "Failed to allocate buffer");
+    ret = httpd_resp_send_500(req);
+    goto cleanup;
+  }
+
+  size_t read_bytes;
+  while ((read_bytes = fread(buf, 1, SCRATCH_BUFSIZE, f)) > 0) {
+    if (httpd_resp_send_chunk(req, (char *)buf, read_bytes) != ESP_OK) {
+      ret = ESP_FAIL;
+      break;
+    }
+  }
+
+  if (ferror(f)) {
+    ESP_LOGE(TAG, "File read error");
+    ret = ESP_FAIL;
+  }
+
+cleanup:
+  if (f)
+    fclose(f);
+  if (buf)
+    heap_caps_free(buf);
+
+  if (ret == ESP_OK) {
+    httpd_resp_send_chunk(req, NULL, 0);
+  } else {
+    httpd_resp_send_500(req);
+  }
+
+  return ret;
+}
+// esp_err_t get_handler(httpd_req_t *req) {
+//   const int is_webapp_uploaded = check_webapp_uploaded();
+//   if (!is_webapp_uploaded) {
+//     ESP_LOGW(TAG, "Web application not yet uploaded");
+//     return httpd_resp_send(req, default_html_response,
+//                            strlen(default_html_response));
+//   }
+//
+//   FILE *f = fopen("/spiffs/index.html", "rb"); // Открываем в бинарном режиме
+//   if (!f) {
+//     ESP_LOGE(TAG, "Failed to open index.html");
+//     return httpd_resp_send_500(req);
+//   }
+//
+//   // Выделяем выровненный буфер в куче
+//   uint8_t *buf = heap_caps_malloc(SCRATCH_BUFSIZE, MALLOC_CAP_DMA);
+//   if (!buf) {
+//     fclose(f);
+//     ESP_LOGE(TAG, "Failed to allocate buffer");
+//     return httpd_resp_send_500(req);
+//   }
+//
+//   esp_err_t ret = ESP_OK;
+//   size_t read_bytes;
+//
+//   while ((read_bytes = fread(buf, 1, SCRATCH_BUFSIZE, f)) > 0) {
+//     if (httpd_req_get_hdr_value_len(req, "Connection") < 0) {
+//       ret = ESP_FAIL;
+//       break;
+//     }
+//     if (httpd_resp_send_chunk(req, (char *)buf, read_bytes) != ESP_OK) {
+//       ret = ESP_FAIL;
+//       break;
+//     }
+//   }
+//
+//   // Проверяем ошибки чтения
+//   if (ferror(f)) {
+//     ESP_LOGE(TAG, "File read error");
+//     ret = ESP_FAIL;
+//   }
+//
+//   fclose(f);
+//   heap_caps_free(buf);
+//
+//   // Завершаем ответ
+//   if (ret == ESP_OK) {
+//     httpd_resp_send_chunk(req, NULL, 0);
+//   } else {
+//     httpd_resp_send_500(req);
+//   }
+//
+//   return ret;
+// }
+
+esp_err_t upload_handler(httpd_req_t *req) {
+  char *buf = malloc(UPLOAD_BUFFER_SIZE); // Выделяем буфер в куче
+  if (!buf) {
     httpd_resp_send_500(req);
     return ESP_FAIL;
   }
-  char buf[SCRATCH_BUFSIZE];
-  size_t read_bytes;
-  while ((read_bytes = fread(buf, 1, sizeof(buf), f)) > 0) {
-    httpd_resp_send_chunk(req, buf, read_bytes);
-  }
-  fclose(f);
-  httpd_resp_send_chunk(req, NULL, 0); // Завершение ответа
-  return ESP_OK;
-}
 
-esp_err_t upload_handler(httpd_req_t *req) {
-  char buf[SCRATCH_BUFSIZE];
-  int remaining = req->content_len;
-  char filename[128];
-  bool is_first_chunk = true;
+  char filename[128] = {0};
   FILE *fd = NULL;
   const char *fail_resp = "{\"result\": false }";
   char boundary[70] = {0};
   bool file_complete = false;
+  size_t total_written = 0;
 
-  // Получаем boundary из заголовка Content-Type
+  // Получаем boundary
   char content_type[128];
   if (httpd_req_get_hdr_value_str(req, "Content-Type", content_type,
                                   sizeof(content_type))) {
+    free(buf);
     httpd_resp_send(req, fail_resp, strlen(fail_resp));
     return ESP_FAIL;
   }
 
   char *boundary_start = strstr(content_type, "boundary=");
   if (!boundary_start) {
+    free(buf);
     httpd_resp_send(req, fail_resp, strlen(fail_resp));
     return ESP_FAIL;
   }
-  boundary_start += 9; // длина "boundary="
-  strncpy(boundary, boundary_start, sizeof(boundary) - 1);
-  boundary[sizeof(boundary) - 1] = '\0';
+  strncpy(boundary, boundary_start + 9, sizeof(boundary) - 1);
+
+  // Обработка данных
+  int remaining = req->content_len;
+  bool is_first_chunk = true;
+  char *boundary_search_start = buf;
+  size_t boundary_search_len = 0;
 
   while (remaining > 0 && !file_complete) {
-    int received = httpd_req_recv(req, buf, MIN(remaining, sizeof(buf)));
+    int received = httpd_req_recv(req, buf, MIN(remaining, UPLOAD_BUFFER_SIZE));
     if (received <= 0) {
       if (fd)
         fclose(fd);
+      free(buf);
       httpd_resp_send(req, fail_resp, strlen(fail_resp));
       return ESP_FAIL;
     }
 
     if (is_first_chunk) {
-      // Извлекаем имя файла
+      // Парсинг имени файла из первого чанка
       char *start = strstr(buf, "filename=\"");
       if (!start) {
+        free(buf);
         httpd_resp_send(req, fail_resp, strlen(fail_resp));
         return ESP_FAIL;
       }
-      start += strlen("filename=\"");
+      start += 10;
       char *end = strchr(start, '"');
       if (!end) {
+        free(buf);
         httpd_resp_send(req, fail_resp, strlen(fail_resp));
         return ESP_FAIL;
       }
       strncpy(filename, start, end - start);
-      filename[end - start] = '\0';
-
-      // Открываем файл для записи
+      // Открытие файла
       char filepath[256];
       snprintf(filepath, sizeof(filepath), "/spiffs/%s", filename);
-      fd = fopen(filepath, "w");
+      fd = fopen(filepath, "wb");
       if (!fd) {
+        free(buf);
         httpd_resp_send(req, fail_resp, strlen(fail_resp));
         return ESP_FAIL;
       }
 
-      // Находим начало данных файла
+      // Поиск начала данных
       char *data_start = strstr(buf, "\r\n\r\n");
       if (data_start) {
         data_start += 4;
-        size_t data_len = buf + received - data_start;
-
-        // Проверяем, не содержится ли boundary в первом чанке
-        char *boundary_pos =
-            memmem(data_start, data_len, boundary, strlen(boundary));
-        if (boundary_pos) {
-          // Записываем только данные до boundary
-          fwrite(data_start, 1, boundary_pos - data_start - 2,
-                 fd); // -2 для \r\n перед boundary
-          file_complete = true;
-        } else {
-          fwrite(data_start, 1, data_len, fd);
-        }
+        boundary_search_start = data_start;
+        boundary_search_len = buf + received - data_start;
       }
       is_first_chunk = false;
     } else {
-      // Проверяем наличие boundary в чанке
-      char *boundary_pos = memmem(buf, received, boundary, strlen(boundary));
-      if (boundary_pos) {
-        // Записываем только данные до boundary
-        fwrite(buf, 1, boundary_pos - buf - 2,
-               fd); // -2 для \r\n перед boundary
-        file_complete = true;
-      } else {
-        fwrite(buf, 1, received, fd);
-      }
+      boundary_search_start = buf;
+      boundary_search_len = received;
     }
+
+    // Поиск boundary
+    char *boundary_pos = memmem(boundary_search_start, boundary_search_len,
+                                boundary, strlen(boundary));
+    if (boundary_pos) {
+      size_t to_write =
+          boundary_pos - boundary_search_start - 2; // Учитываем \r\n
+      fwrite(boundary_search_start, 1, to_write, fd);
+      total_written += to_write;
+      file_complete = true;
+    } else {
+      // Записываем весь чанк (кроме последних N байт, где может начинаться
+      // boundary)
+      size_t safe_write = boundary_search_len - strlen(boundary) - 4;
+      fwrite(boundary_search_start, 1, safe_write, fd);
+      total_written += safe_write;
+
+      // Сохраняем хвост для следующей итерации
+      memmove(buf, boundary_search_start + safe_write,
+              boundary_search_len - safe_write);
+      boundary_search_len = boundary_search_len - safe_write;
+    }
+
     remaining -= received;
   }
 
   if (fd)
     fclose(fd);
+  free(buf);
 
-  const char *success_resp = "{\"result\": true }";
-  httpd_resp_send(req, success_resp, strlen(success_resp));
+  ESP_LOGI(TAG, "File %s uploaded, size: %d bytes", filename,
+           (int)total_written);
+  char *resp = "{\"result\": true}";
+  httpd_resp_send(req, resp, strlen(resp));
+  return ESP_OK;
+}
+
+static esp_err_t favicon_handler(httpd_req_t *req) {
+  // Отправляем HTTP 204 No Content (нет данных)
+  httpd_resp_set_status(req, "204 No Content");
+  httpd_resp_send(req, NULL, 0);
   return ESP_OK;
 }
 
@@ -285,6 +291,11 @@ httpd_uri_t uri_post_upload = {.uri = "/upload",
                                .method = HTTP_POST,
                                .handler = upload_handler,
                                .user_ctx = NULL};
+
+httpd_uri_t uri_favicon = {.uri = "/favicon.ico",
+                           .method = HTTP_GET,
+                           .handler = favicon_handler,
+                           .user_ctx = NULL};
 
 httpd_handle_t start_server() {
   /* Generate default configuration */
@@ -297,38 +308,9 @@ httpd_handle_t start_server() {
   if (httpd_start(&server, &config) == ESP_OK) {
     /* Register URI handlers */
     httpd_register_uri_handler(server, &uri_get);
+    httpd_register_uri_handler(server, &uri_favicon);
     httpd_register_uri_handler(server, &uri_post_upload);
   }
   /* If server failed to start, handle will be NULL */
   return server;
 }
-
-// fs operations examples >>>>
-// ESP_LOGI(TAG, "Read before:");
-// read_file();
-// ESP_LOGI(TAG, "Opening file");
-// FILE *f = fopen("/spiffs/hello.txt", "w");
-// if (f == NULL) {
-//   ESP_LOGE(TAG, "Failed to open file for writing");
-//   return;
-// }
-// fprintf(f, "Hello World2!\n");
-// fclose(f);
-// ESP_LOGI(TAG, "File written");
-//
-// // Check if destination file exists before renaming
-// struct stat st;
-// if (stat("/spiffs/foo.txt", &st) == 0) {
-//   // Delete it if it exists
-//   unlink("/spiffs/foo.txt");
-// }
-//
-// // Rename original file
-// ESP_LOGI(TAG, "Renaming file");
-// if (rename("/spiffs/hello.txt", "/spiffs/foo.txt") != 0) {
-//   ESP_LOGE(TAG, "Rename failed");
-//   return;
-// }
-// read_file();
-// esp_vfs_spiffs_unregister(NULL);
-// ESP_LOGI(TAG, "SPIFFS unmounted");

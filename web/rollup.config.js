@@ -1,10 +1,8 @@
-import replace from 'rollup-plugin-replace';
 import resolve from '@rollup/plugin-node-resolve';
 import commonjs from '@rollup/plugin-commonjs';
 import babel from '@rollup/plugin-babel';
 import typescript from '@rollup/plugin-typescript';
 import postcss from 'rollup-plugin-postcss';
-import { terser } from 'rollup-plugin-terser';
 import html from 'rollup-plugin-html';
 
 export default {
@@ -15,9 +13,9 @@ export default {
 		name: 'app'
 	},
 	plugins: [
-		replace({
-			'process.env.NODE_ENV': JSON.stringify('production')
-		}),
+		// replace({
+		// 	'process.env.NODE_ENV': JSON.stringify('production')
+		// }),
 		html({
 			include: '**/*.html',
 			htmlMinifierOptions: {
@@ -38,19 +36,19 @@ export default {
 			include: /node_modules/
 		}),
 		typescript({
-			jsx: 'react',
+			// jsx: 'react',
 			tsconfig: './tsconfig.json'
 		}),
 		babel({
 			babelHelpers: 'bundled',
 			presets: [
 				'@babel/preset-env',
-				'@babel/preset-react',
+				// '@babel/preset-react',
 				'@babel/preset-typescript'
 			],
 			extensions: ['.js', '.jsx', '.ts', '.tsx']
 		}),
-		terser()
+		// terser()
 	]
 };
 

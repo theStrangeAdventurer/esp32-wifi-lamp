@@ -1,5 +1,4 @@
-import React from 'react';
-import ReactDOM from 'react-dom/client';
+import { render, createElement } from 'preact';
 import './styles.css';
 
 const App = (props: { message: string }) => {
@@ -7,13 +6,4 @@ const App = (props: { message: string }) => {
 		<h3 className="app">{props.message}</h3>
 	);
 }
-
-const root = ReactDOM.createRoot(
-	document.getElementById('root') as HTMLElement
-);
-
-root.render(
-	<React.StrictMode>
-		<App message="Hello, TypeScript with React!" />
-	</React.StrictMode>
-);
+render(<App message="Hello world" />, document.getElementById('root') as HTMLElement);
