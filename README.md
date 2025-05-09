@@ -1,7 +1,5 @@
-# Smart lamp (WIP)
-This ESP8266-based project creates a web interface accessible via your local Wi-Fi network, allowing you to control the brightness of addressable LEDs (e.g., WS2812B).
-
-> https://github.com/espressif/ESP8266_RTOS_SDK used as framework
+# Smart light (WIP)
+This ESP8266-based (used ) project creates a web interface accessible via your local Wi-Fi network, allowing you to control the brightness of addressable LEDs (e.g., WS2812B).
 
 # WiFi station example
 
@@ -11,8 +9,6 @@ This ESP8266-based project creates a web interface accessible via your local Wi-
 ## How to use example
 
 ### Configure the project
-
-1. Rename `main/Kconfig.projbuild.example` to `main/Kconfig.projbuild` end set your wi-fi network name and password
 
 ```
 idf.py menuconfig

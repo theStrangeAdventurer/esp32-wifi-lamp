@@ -9,17 +9,17 @@
 #include "esp_event.h"
 #include "esp_log.h"
 #include "esp_netif.h"
+#include "esp_spiffs.h" // Добавляем для SPIFFS
 #include "esp_system.h"
 #include "esp_wifi.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/event_groups.h"
 #include "freertos/task.h"
+#include "lwip/err.h"
+#include "lwip/sys.h"
 #include "nvs.h"
 #include "nvs_flash.h"
 #include <string.h>
-
-#include "lwip/err.h"
-#include "lwip/sys.h"
 
 /* The examples use WiFi configuration that you can set via project
    configuration menu
@@ -45,6 +45,41 @@ static EventGroupHandle_t s_wifi_event_group;
 #define WIFI_FAIL_BIT BIT1
 
 static const char *TAG = "wifi station";
+
+// Инициализация SPIFFS
+static void init_spiffs(void) {
+  ESP_LOGI(TAG, "Initializing SPIFFS");
+
+  esp_vfs_spiffs_conf_t conf = {.base_path = "/spiffs",
+                                .partition_label = NULL,
+                                .max_files = 5,
+                                .format_if_mount_failed = true};
+
+  esp_err_t ret = esp_vfs_spiffs_register(&conf);
+
+  if (ret != ESP_OK) {
+    ESP_LOGE(TAG, "SPIFFS mount failed! (err=0x%x)", ret);
+    if (ret == ESP_FAIL) {
+      ESP_LOGE(TAG, "Formatting SPIFFS...");
+      esp_spiffs_format(NULL); // Форматирование при ошибке
+      esp_vfs_spiffs_register(&conf);
+    } else if (ret == ESP_ERR_NOT_FOUND) {
+      ESP_LOGE(TAG, "Failed to find SPIFFS partition");
+    } else {
+      ESP_LOGE(TAG, "Failed to initialize SPIFFS (%s)", esp_err_to_name(ret));
+    }
+    return;
+  }
+
+  size_t total = 0, used = 0;
+  ret = esp_spiffs_info(NULL, &total, &used);
+  if (ret != ESP_OK) {
+    ESP_LOGE(TAG, "Failed to get SPIFFS partition information (%s)",
+             esp_err_to_name(ret));
+  } else {
+    ESP_LOGI(TAG, "Partition size: total: %d, used: %d", (int)total, (int)used);
+  }
+}
 
 static int s_retry_num = 0;
 
@@ -116,6 +151,7 @@ void wifi_init_sta(void) {
   if (bits & WIFI_CONNECTED_BIT) {
     ESP_LOGI(TAG, "connected to ap SSID:%s password:%s", EXAMPLE_ESP_WIFI_SSID,
              EXAMPLE_ESP_WIFI_PASS);
+    init_spiffs();
     start_server();
   } else if (bits & WIFI_FAIL_BIT) {
     ESP_LOGI(TAG, "Failed to connect to SSID:%s, password:%s",
