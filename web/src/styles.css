@@ -1,5 +1,67 @@
-.app {
-	padding: 1rem;
-	border-radius: 1rem;
-	background: #eee;
+body {
+	padding: 0;
+	margin: 0;
+}
+
+/* Slider.css */
+.app-container {
+	width: 100vw;
+	padding-inline: 2rem;
+	padding-top: 2rem;
+	box-sizing: border-box;
+	height: 100vh;
+	background-color: #0a0f1b;
+	touch-action: none;
+	/* Отключаем стандартное поведение при касании */
+}
+
+
+/* Slider.css */
+.slider-container {
+	width: 100%;
+	height: 100%;
+	position: relative;
+	touch-action: none;
+	overflow: hidden;
+	background-color: rgb(15, 23, 41);
+	border-top-left-radius: 2rem;
+	border-top-right-radius: 2rem;
+}
+
+.slider-fill {
+	width: 100%;
+	background-color: #4268C5;
+	/* Цвет заполнения как на скриншоте */
+	position: absolute;
+	bottom: 0;
+	transition: height 0.1s ease;
+	border-top-left-radius: 2rem;
+	border-top-right-radius: 2rem;
+	/* Плавный переход при изменении */
+}
+
+.brightness-label {
+	position: absolute;
+	top: 50%;
+	left: 50%;
+	transform: translate(-50%, -50%);
+	color: #fff;
+	font-size: 86px;
+	font-weight: bold;
+	font-family: sans-serif;
+	opacity: 0.7;
+	pointer-events: none;
+}
+
+.marker {
+	position: absolute;
+	width: 90%;
+	/* Полоски не на всю ширину, а на 70% */
+	height: 1px;
+	/* Толщина полоски */
+	background-color: rgba(255, 255, 255, 0.1);
+	/* Полупрозрачный белый цвет */
+	left: 50%;
+	transform: translateX(-50%);
+	/* Центрируем полоску */
 }
