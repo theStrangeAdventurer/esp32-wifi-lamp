@@ -20,15 +20,53 @@
   ((a) < (b) ? (a) : (b)) // Добавляем макрос MIN
                           //
 static const char *TAG = "http_server";
+static char *cached_index_html = NULL;
+static size_t cached_index_len = 0;
+
+esp_err_t cache_index_html() {
+  FILE *f = fopen("/spiffs/index.html", "rb");
+  if (!f) {
+    ESP_LOGE(TAG, "Failed to open index.html");
+    return ESP_FAIL;
+  }
+
+  // Получаем размер файла
+  fseek(f, 0, SEEK_END);
+  cached_index_len = ftell(f);
+  fseek(f, 0, SEEK_SET);
+
+  // Выделяем память (обычная куча, не DMA)
+  cached_index_html = malloc(cached_index_len + 1);
+  if (!cached_index_html) {
+    fclose(f);
+    ESP_LOGE(TAG, "Failed to allocate cache buffer");
+    return ESP_FAIL;
+  }
+
+  size_t read_bytes = fread(cached_index_html, 1, cached_index_len, f);
+  fclose(f);
+
+  if (read_bytes != cached_index_len) {
+    free(cached_index_html);
+    cached_index_html = NULL;
+    ESP_LOGE(TAG, "Failed to read index.html");
+    return ESP_FAIL;
+  }
+
+  cached_index_html[cached_index_len] = '\0';
+  ESP_LOGI(TAG, "Cached index.html (%d bytes)", (int)cached_index_len);
+  return ESP_OK;
+}
 
 int check_webapp_uploaded() {
   FILE *f = NULL;
   // Open renamed file for reading
-  ESP_LOGI(TAG, "Reading file");
+  ESP_LOGI(TAG, "Check index.html exists");
   f = fopen("/spiffs/index.html", "r");
   if (f == NULL) {
     return 0;
   }
+  fclose(f);
   return 1;
 }
 
@@ -48,58 +86,64 @@ const char *default_html_response =
     "</html>";
 
 esp_err_t get_handler(httpd_req_t *req) {
-  FILE *f = NULL;
-  uint8_t *buf = NULL;
-  esp_err_t ret = ESP_OK;
-
   const int is_webapp_uploaded = check_webapp_uploaded();
   if (!is_webapp_uploaded) {
     ESP_LOGW(TAG, "Web application not yet uploaded");
     return httpd_resp_send(req, default_html_response,
                            strlen(default_html_response));
   }
-
-  f = fopen("/spiffs/index.html", "rb");
-  if (!f) {
-    ESP_LOGE(TAG, "Failed to open index.html");
-    ret = httpd_resp_send_500(req);
-    goto cleanup;
+  if (!cached_index_html) {
+    ESP_LOGE(TAG, "Cache not initialized");
+    return httpd_resp_send_500(req);
   }
 
-  buf = heap_caps_malloc(SCRATCH_BUFSIZE, MALLOC_CAP_DMA);
-  if (!buf) {
-    ESP_LOGE(TAG, "Failed to allocate buffer");
-    ret = httpd_resp_send_500(req);
-    goto cleanup;
-  }
-
-  size_t read_bytes;
-  while ((read_bytes = fread(buf, 1, SCRATCH_BUFSIZE, f)) > 0) {
-    if (httpd_resp_send_chunk(req, (char *)buf, read_bytes) != ESP_OK) {
-      ret = ESP_FAIL;
-      break;
-    }
-  }
-
-  if (ferror(f)) {
-    ESP_LOGE(TAG, "File read error");
-    ret = ESP_FAIL;
-  }
-
-cleanup:
-  if (f)
-    fclose(f);
-  if (buf)
-    heap_caps_free(buf);
-
-  if (ret == ESP_OK) {
-    httpd_resp_send_chunk(req, NULL, 0);
-  } else {
-    httpd_resp_send_500(req);
-  }
-
-  return ret;
+  return httpd_resp_send(req, cached_index_html, cached_index_len);
+  // Read file from spiffs (not used)
+  // FILE *f = NULL;
+  // uint8_t *buf = NULL;
+  // esp_err_t ret = ESP_OK;
+  //   f = fopen("/spiffs/index.html", "rb");
+  //   if (!f) {
+  //     ESP_LOGE(TAG, "Failed to open index.html");
+  //     ret = httpd_resp_send_500(req);
+  //     goto cleanup;
+  //   }
+  //
+  //   buf = heap_caps_malloc(SCRATCH_BUFSIZE, MALLOC_CAP_DMA);
+  //   if (!buf) {
+  //     ESP_LOGE(TAG, "Failed to allocate buffer");
+  //     ret = httpd_resp_send_500(req);
+  //     goto cleanup;
+  //   }
+  //
+  //   size_t read_bytes;
+  //   while ((read_bytes = fread(buf, 1, SCRATCH_BUFSIZE, f)) > 0) {
+  //     if (httpd_resp_send_chunk(req, (char *)buf, read_bytes) != ESP_OK) {
+  //       ret = ESP_FAIL;
+  //       break;
+  //     }
+  //   }
+  //
+  //   if (ferror(f)) {
+  //     ESP_LOGE(TAG, "File read error");
+  //     ret = ESP_FAIL;
+  //   }
+  //
+  // cleanup:
+  //   if (f)
+  //     fclose(f);
+  //   if (buf)
+  //     heap_caps_free(buf);
+  //
+  //   if (ret == ESP_OK) {
+  //     httpd_resp_send_chunk(req, NULL, 0);
+  //   } else {
+  //     httpd_resp_send_500(req);
+  //   }
+  //
+  //   return ret;
 }
+
 // esp_err_t get_handler(httpd_req_t *req) {
 //   const int is_webapp_uploaded = check_webapp_uploaded();
 //   if (!is_webapp_uploaded) {
@@ -154,9 +198,8 @@ cleanup:
 //
 //   return ret;
 // }
-
 esp_err_t upload_handler(httpd_req_t *req) {
-  char *buf = malloc(UPLOAD_BUFFER_SIZE); // Выделяем буфер в куче
+  char *buf = malloc(UPLOAD_BUFFER_SIZE);
   if (!buf) {
     httpd_resp_send_500(req);
     return ESP_FAIL;
@@ -164,15 +207,17 @@ esp_err_t upload_handler(httpd_req_t *req) {
 
   char filename[128] = {0};
   FILE *fd = NULL;
-  const char *fail_resp = "{\"result\": false }";
+  const char *fail_resp = "{\"result\": false}";
+  const char *success_resp = "{\"result\": true}";
   char boundary[70] = {0};
   bool file_complete = false;
   size_t total_written = 0;
 
-  // Получаем boundary
+  // Получаем boundary из Content-Type
   char content_type[128];
   if (httpd_req_get_hdr_value_str(req, "Content-Type", content_type,
-                                  sizeof(content_type))) {
+                                  sizeof(content_type)) != ESP_OK) {
+    ESP_LOGE(TAG, "Failed to get Content-Type header");
     free(buf);
     httpd_resp_send(req, fail_resp, strlen(fail_resp));
     return ESP_FAIL;
@@ -180,21 +225,24 @@ esp_err_t upload_handler(httpd_req_t *req) {
 
   char *boundary_start = strstr(content_type, "boundary=");
   if (!boundary_start) {
+    ESP_LOGE(TAG, "Boundary not found in Content-Type");
     free(buf);
     httpd_resp_send(req, fail_resp, strlen(fail_resp));
     return ESP_FAIL;
   }
   strncpy(boundary, boundary_start + 9, sizeof(boundary) - 1);
+  ESP_LOGI(TAG, "Boundary: %s", boundary);
 
   // Обработка данных
   int remaining = req->content_len;
   bool is_first_chunk = true;
-  char *boundary_search_start = buf;
-  size_t boundary_search_len = 0;
+  char *data_start = NULL;
+  size_t data_len = 0;
 
   while (remaining > 0 && !file_complete) {
     int received = httpd_req_recv(req, buf, MIN(remaining, UPLOAD_BUFFER_SIZE));
     if (received <= 0) {
+      ESP_LOGE(TAG, "Receive failed or connection closed");
       if (fd)
         fclose(fd);
       free(buf);
@@ -203,64 +251,64 @@ esp_err_t upload_handler(httpd_req_t *req) {
     }
 
     if (is_first_chunk) {
-      // Парсинг имени файла из первого чанка
-      char *start = strstr(buf, "filename=\"");
-      if (!start) {
+      // Парсинг имени файла из заголовков
+      char *filename_start = strstr(buf, "filename=\"");
+      if (!filename_start) {
+        ESP_LOGE(TAG, "Filename not found in headers");
         free(buf);
         httpd_resp_send(req, fail_resp, strlen(fail_resp));
         return ESP_FAIL;
       }
-      start += 10;
-      char *end = strchr(start, '"');
-      if (!end) {
+      filename_start += 10;
+      char *filename_end = strchr(filename_start, '"');
+      if (!filename_end) {
+        ESP_LOGE(TAG, "Malformed filename header");
         free(buf);
         httpd_resp_send(req, fail_resp, strlen(fail_resp));
         return ESP_FAIL;
       }
-      strncpy(filename, start, end - start);
-      // Открытие файла
+      strncpy(filename, filename_start, filename_end - filename_start);
+
+      // Открываем файл в SPIFFS
       char filepath[256];
       snprintf(filepath, sizeof(filepath), "/spiffs/%s", filename);
       fd = fopen(filepath, "wb");
       if (!fd) {
+        ESP_LOGE(TAG, "Failed to open file %s", filepath);
         free(buf);
         httpd_resp_send(req, fail_resp, strlen(fail_resp));
         return ESP_FAIL;
       }
 
-      // Поиск начала данных
-      char *data_start = strstr(buf, "\r\n\r\n");
+      // Находим начало данных файла (после \r\n\r\n)
+      data_start = strstr(buf, "\r\n\r\n");
       if (data_start) {
         data_start += 4;
-        boundary_search_start = data_start;
-        boundary_search_len = buf + received - data_start;
+        data_len = buf + received - data_start;
+      } else {
+        data_start = buf;
+        data_len = received;
       }
       is_first_chunk = false;
     } else {
-      boundary_search_start = buf;
-      boundary_search_len = received;
+      data_start = buf;
+      data_len = received;
     }
 
-    // Поиск boundary
-    char *boundary_pos = memmem(boundary_search_start, boundary_search_len,
-                                boundary, strlen(boundary));
+    // Ищем boundary в текущем чанке
+    char *boundary_pos =
+        memmem(data_start, data_len, boundary, strlen(boundary));
     if (boundary_pos) {
-      size_t to_write =
-          boundary_pos - boundary_search_start - 2; // Учитываем \r\n
-      fwrite(boundary_search_start, 1, to_write, fd);
+      // Нашли конец файла
+      size_t to_write = boundary_pos - data_start - 2; // Учитываем \r\n
+      fwrite(data_start, 1, to_write, fd);
       total_written += to_write;
       file_complete = true;
+      ESP_LOGI(TAG, "File end detected at %d bytes", (int)to_write);
     } else {
-      // Записываем весь чанк (кроме последних N байт, где может начинаться
-      // boundary)
-      size_t safe_write = boundary_search_len - strlen(boundary) - 4;
-      fwrite(boundary_search_start, 1, safe_write, fd);
-      total_written += safe_write;
-
-      // Сохраняем хвост для следующей итерации
-      memmove(buf, boundary_search_start + safe_write,
-              boundary_search_len - safe_write);
-      boundary_search_len = boundary_search_len - safe_write;
+      // Записываем весь чанк (если boundary не найден)
+      fwrite(data_start, 1, data_len, fd);
+      total_written += data_len;
     }
 
     remaining -= received;
@@ -270,11 +318,17 @@ esp_err_t upload_handler(httpd_req_t *req) {
     fclose(fd);
   free(buf);
 
-  ESP_LOGI(TAG, "File %s uploaded, size: %d bytes", filename,
-           (int)total_written);
-  char *resp = "{\"result\": true}";
-  httpd_resp_send(req, resp, strlen(resp));
-  return ESP_OK;
+  if (file_complete) {
+    ESP_LOGI(TAG, "File %s uploaded successfully, size: %d bytes", filename,
+             (int)total_written);
+    cache_index_html(); // Если нужно обновить кэш
+    httpd_resp_send(req, success_resp, strlen(success_resp));
+    return ESP_OK;
+  } else {
+    ESP_LOGE(TAG, "File upload incomplete");
+    httpd_resp_send(req, fail_resp, strlen(fail_resp));
+    return ESP_FAIL;
+  }
 }
 
 static esp_err_t favicon_handler(httpd_req_t *req) {
