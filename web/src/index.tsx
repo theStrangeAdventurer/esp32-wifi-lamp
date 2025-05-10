@@ -50,6 +50,33 @@ const App = () => {
 		setIsDragging(false);
 	};
 
+	useEffect(() => {
+		const sendBrightness = async () => {
+			try {
+				const brightness = Math.round(value); // Округляем значение яркости
+				const body = `brightness=${brightness}`; // Формат application/x-www-form-urlencoded
+
+				const response = await fetch('/api/control', {
+					method: 'POST',
+					headers: {
+						'Content-Type': 'application/x-www-form-urlencoded',
+					},
+					body: body,
+				});
+
+				if (!response.ok) {
+					throw new Error(`HTTP error! Status: ${response.status}`);
+				}
+
+				const result = await response.text();
+				console.log("Result: ", result);
+			} catch (error) {
+				console.error("Error while sending brightness", error);
+			}
+		};
+		sendBrightness();
+	}, [value]);
+
 	// Добавляем глобальные обработчики для событий движения и отпускания
 	useEffect(() => {
 		window.addEventListener('mousemove', handleMouseMove);
