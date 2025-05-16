@@ -13,6 +13,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/types.h>
 
 #define BUFFER_SIZE 1024
 #define MAX_BODY_SIZE 1024
@@ -24,6 +25,9 @@
 static const char *TAG = "http_server";
 static char *cached_index_html = NULL;
 static size_t cached_index_len = 0;
+
+// from led.c
+void set_light_value(uint8_t percent_value);
 
 esp_err_t cache_index_html() {
   FILE *f = fopen("/spiffs/index.html", "rb");
@@ -100,51 +104,8 @@ esp_err_t get_handler(httpd_req_t *req) {
   }
 
   return httpd_resp_send(req, cached_index_html, cached_index_len);
-  // Read file from spiffs (not used)
-  // FILE *f = NULL;
-  // uint8_t *buf = NULL;
-  // esp_err_t ret = ESP_OK;
-  //   f = fopen("/spiffs/index.html", "rb");
-  //   if (!f) {
-  //     ESP_LOGE(TAG, "Failed to open index.html");
-  //     ret = httpd_resp_send_500(req);
-  //     goto cleanup;
-  //   }
-  //
-  //   buf = heap_caps_malloc(SCRATCH_BUFSIZE, MALLOC_CAP_DMA);
-  //   if (!buf) {
-  //     ESP_LOGE(TAG, "Failed to allocate buffer");
-  //     ret = httpd_resp_send_500(req);
-  //     goto cleanup;
-  //   }
-  //
-  //   size_t read_bytes;
-  //   while ((read_bytes = fread(buf, 1, SCRATCH_BUFSIZE, f)) > 0) {
-  //     if (httpd_resp_send_chunk(req, (char *)buf, read_bytes) != ESP_OK) {
-  //       ret = ESP_FAIL;
-  //       break;
-  //     }
-  //   }
-  //
-  //   if (ferror(f)) {
-  //     ESP_LOGE(TAG, "File read error");
-  //     ret = ESP_FAIL;
-  //   }
-  //
-  // cleanup:
-  //   if (f)
-  //     fclose(f);
-  //   if (buf)
-  //     heap_caps_free(buf);
-  //
-  //   if (ret == ESP_OK) {
-  //     httpd_resp_send_chunk(req, NULL, 0);
-  //   } else {
-  //     httpd_resp_send_500(req);
-  //   }
-  //
-  //   return ret;
 }
+
 esp_err_t upload_handler(httpd_req_t *req) {
   char *buf = malloc(UPLOAD_BUFFER_SIZE);
   if (!buf) {
@@ -313,10 +274,12 @@ esp_err_t control_handler(httpd_req_t *req) {
 
   // Смещаемся к значению после "brightness="
   brightness_str += strlen("brightness=");
-  int brightness = atoi(brightness_str); // Преобразуем строку в int
+  u_int8_t brightness = atoi(brightness_str); // Преобразуем строку в int
 
   // Логируем значение brightness
   ESP_LOGI(TAG, "Brightness value: %d", brightness);
+
+  set_light_value(brightness);
 
   // Отправляем успешный ответ
   const char *resp = "Brightness received successfully";

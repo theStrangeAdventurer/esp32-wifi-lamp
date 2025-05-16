@@ -2,6 +2,7 @@ import { render, h } from 'preact';
 import { useState, useRef, useEffect } from 'preact/hooks';
 
 import './styles.css';
+
 const App = () => {
 	const [value, setValue] = useState<number>(50); // Начальное значение шкалы (50%)
 	const sliderRef = useRef<HTMLDivElement>(null);
