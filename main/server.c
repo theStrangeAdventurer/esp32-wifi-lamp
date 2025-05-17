@@ -10,6 +10,7 @@
 #include "lwip/netdb.h"
 #include "lwip/sockets.h"
 #include "lwip/sys.h"
+#include "mdns.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -28,6 +29,38 @@ static size_t cached_index_len = 0;
 
 // from led.c
 void set_light_value(uint8_t percent_value);
+
+esp_err_t init_mdns() {
+    esp_err_t err = mdns_init();
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "mDNS Init failed: %s", esp_err_to_name(err));
+        return err;
+    }
+
+    // Установить имя хоста
+    err = mdns_hostname_set("smart-lamp");
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "mDNS Set hostname failed: %s", esp_err_to_name(err));
+        return err;
+    }
+
+    // Установить имя экземпляра (для обнаружения)
+    err = mdns_instance_name_set("ESP32 Web Server");
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "mDNS Set instance name failed: %s", esp_err_to_name(err));
+        return err;
+    }
+
+    // Добавить сервис HTTP
+    err = mdns_service_add(NULL, "_http", "_tcp", 80, NULL, 0);
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "mDNS Add service failed: %s", esp_err_to_name(err));
+        return err;
+    }
+
+    ESP_LOGI(TAG, "mDNS started: http://smart-lamp.local");
+    return ESP_OK;
+}
 
 esp_err_t cache_index_html() {
   FILE *f = fopen("/spiffs/index.html", "rb");
@@ -97,6 +130,9 @@ esp_err_t get_handler(httpd_req_t *req) {
     ESP_LOGW(TAG, "Web application not yet uploaded");
     return httpd_resp_send(req, default_html_response,
                            strlen(default_html_response));
+  } 
+  if (!cached_index_html) {
+	cache_index_html(); // Trying to cache existing file
   }
   if (!cached_index_html) {
     ESP_LOGE(TAG, "Cache not initialized");
@@ -313,6 +349,7 @@ httpd_uri_t uri_favicon = {.uri = "/favicon.ico",
                            .user_ctx = NULL};
 
 httpd_handle_t start_server() {
+  init_mdns();
   httpd_config_t config = HTTPD_DEFAULT_CONFIG();
   httpd_handle_t server = NULL;
 
