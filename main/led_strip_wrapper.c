@@ -1,5 +1,5 @@
 #include "esp_log.h"
-#include "led_matrix.h"
+#include "led_strip.h"
 
 #define RMT_LED_STRIP_RESOLUTION_HZ                                            \
   10000000 // 10MHz resolution, 1 tick = 0.1us (led strip needs a high
@@ -13,8 +13,8 @@
 const char *TAG = "led.c";
 
 void set_light_value(uint8_t percent_value) {
-	ESP_LOGI(TAG, "Setting light value: %d", percent_value);
-	torch2(percent_value);
+  ESP_LOGI(TAG, "Setting light value: %d", percent_value);
+  torch2(percent_value);
 }
 
 void init_led() {

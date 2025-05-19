@@ -1,4 +1,4 @@
-#include "led_matrix.h"
+#include "led_strip.h"
 #include "driver/rmt_tx.h"
 #include "esp_log.h"
 #include "freertos/FreeRTOS.h"
@@ -12,7 +12,7 @@
            // resolution)
 #define BIT_PER_ONE_ADDRESS_LED 24
 
-static const char *TAG = "led_matrix_component";
+static const char *TAG = "led_strip_component";
 
 /**
  * Global variables
@@ -107,7 +107,7 @@ void init_matrix(int gpio_num, int led_rows, int led_columns) {
 void traverse_matrix(uint8_t *p_pixels, led_callback_t callback,
                      int chase_speed) {
   if (!p_pixels || !callback || led_per_row <= 0 || led_per_col <= 0) {
-        return;  // Защита от некорректных данных
+    return; // Защита от некорректных данных
   }
   for (int i = 0; i < led_per_row; i++) {
     int cell = i * led_per_row;
@@ -142,16 +142,19 @@ static void torch_default(uint8_t *p_pixels, int led_index) {
 }
 
 static uint8_t scale_0_100_to_0_255_fast(uint8_t value) {
-    if (value > 100) value = 100;
-    return (value * 255 + 50) / 100;
+  if (value > 100)
+    value = 100;
+  return (value * 255 + 50) / 100;
 }
 
 void torch2(uint8_t percent_value) {
-	if (percent_value < 1) percent_value = 0;
-	if (percent_value > 100) percent_value = 100;
-	uint8_t val255 = scale_0_100_to_0_255_fast(percent_value);
-	torch_bright = val255;
-	traverse_matrix(led_strip_pixels, torch_warn, 0);
+  if (percent_value < 1)
+    percent_value = 0;
+  if (percent_value > 100)
+    percent_value = 100;
+  uint8_t val255 = scale_0_100_to_0_255_fast(percent_value);
+  torch_bright = val255;
+  traverse_matrix(led_strip_pixels, torch_warn, 0);
 }
 
 void torch(int level, int mode) {

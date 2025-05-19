@@ -15,7 +15,7 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/event_groups.h"
 #include "freertos/task.h"
-#include "led_matrix.h"
+#include "led_strip.h"
 #include "lwip/err.h"
 #include "lwip/inet.h"
 #include "lwip/sys.h"
@@ -103,6 +103,7 @@ static void event_handler(void *arg, esp_event_base_t event_base,
     ip_event_got_ip_t *event = (ip_event_got_ip_t *)event_data;
     char ip_str[16]; // Буфер для IP-адреса (минимум 16 байт для "255.255.255.255")
                      // 
+                     //
                      //
 
     // Новый вариант использования esp_ip4addr_ntoa
