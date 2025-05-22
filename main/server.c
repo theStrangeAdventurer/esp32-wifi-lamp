@@ -1,9 +1,11 @@
+#include "driver/rmt_encoder.h"
 #include "esp_err.h"
 #include "esp_http_server.h"
 #include "esp_log.h"
 #include "esp_spiffs.h"
 #include "esp_system.h"
 #include "esp_vfs.h" // Для работы с файлами
+#include "globals.h"
 #include "http_parser.h"
 #include "lwip/api.h"
 #include "lwip/err.h"
@@ -28,38 +30,38 @@ static char *cached_index_html = NULL;
 static size_t cached_index_len = 0;
 
 // from led.c
-void set_light_value(uint8_t percent_value);
+void set_brightness_value(uint8_t percent_value);
 
 esp_err_t init_mdns() {
-    esp_err_t err = mdns_init();
-    if (err != ESP_OK) {
-        ESP_LOGE(TAG, "mDNS Init failed: %s", esp_err_to_name(err));
-        return err;
-    }
+  esp_err_t err = mdns_init();
+  if (err != ESP_OK) {
+    ESP_LOGE(TAG, "mDNS Init failed: %s", esp_err_to_name(err));
+    return err;
+  }
 
-    // Установить имя хоста
-    err = mdns_hostname_set("smart-lamp");
-    if (err != ESP_OK) {
-        ESP_LOGE(TAG, "mDNS Set hostname failed: %s", esp_err_to_name(err));
-        return err;
-    }
+  // Установить имя хоста
+  err = mdns_hostname_set("smart-lamp");
+  if (err != ESP_OK) {
+    ESP_LOGE(TAG, "mDNS Set hostname failed: %s", esp_err_to_name(err));
+    return err;
+  }
 
-    // Установить имя экземпляра (для обнаружения)
-    err = mdns_instance_name_set("ESP32 Web Server");
-    if (err != ESP_OK) {
-        ESP_LOGE(TAG, "mDNS Set instance name failed: %s", esp_err_to_name(err));
-        return err;
-    }
+  // Установить имя экземпляра (для обнаружения)
+  err = mdns_instance_name_set("ESP32 Web Server");
+  if (err != ESP_OK) {
+    ESP_LOGE(TAG, "mDNS Set instance name failed: %s", esp_err_to_name(err));
+    return err;
+  }
 
-    // Добавить сервис HTTP
-    err = mdns_service_add(NULL, "_http", "_tcp", 80, NULL, 0);
-    if (err != ESP_OK) {
-        ESP_LOGE(TAG, "mDNS Add service failed: %s", esp_err_to_name(err));
-        return err;
-    }
+  // Добавить сервис HTTP
+  err = mdns_service_add(NULL, "_http", "_tcp", 80, NULL, 0);
+  if (err != ESP_OK) {
+    ESP_LOGE(TAG, "mDNS Add service failed: %s", esp_err_to_name(err));
+    return err;
+  }
 
-    ESP_LOGI(TAG, "mDNS started: http://smart-lamp.local");
-    return ESP_OK;
+  ESP_LOGI(TAG, "mDNS started: http://smart-lamp.local");
+  return ESP_OK;
 }
 
 esp_err_t cache_index_html() {
@@ -130,9 +132,9 @@ esp_err_t get_handler(httpd_req_t *req) {
     ESP_LOGW(TAG, "Web application not yet uploaded");
     return httpd_resp_send(req, default_html_response,
                            strlen(default_html_response));
-  } 
+  }
   if (!cached_index_html) {
-	cache_index_html(); // Trying to cache existing file
+    cache_index_html(); // Trying to cache existing file
   }
   if (!cached_index_html) {
     ESP_LOGE(TAG, "Cache not initialized");
@@ -265,7 +267,7 @@ esp_err_t upload_handler(httpd_req_t *req) {
   if (file_complete) {
     ESP_LOGI(TAG, "File %s uploaded successfully, size: %d bytes", filename,
              (int)total_written);
-    cache_index_html(); // Если нужно обновить кэш
+    cache_index_html();
     httpd_resp_send(req, success_resp, strlen(success_resp));
     return ESP_OK;
   } else {
@@ -274,6 +276,16 @@ esp_err_t upload_handler(httpd_req_t *req) {
     return ESP_FAIL;
   }
 }
+
+esp_err_t get_control_handler(httpd_req_t *req) {
+  char resp[128];
+
+  snprintf(resp, sizeof(resp), "{ \"data\": { \"brightness\": %d } }",
+           lamp_state.brightness);
+  httpd_resp_send(req, resp, strlen(resp));
+  return ESP_OK;
+}
+
 esp_err_t control_handler(httpd_req_t *req) {
 
   char buf[MAX_BODY_SIZE];
@@ -315,7 +327,7 @@ esp_err_t control_handler(httpd_req_t *req) {
   // Логируем значение brightness
   ESP_LOGI(TAG, "Brightness value: %d", brightness);
 
-  set_light_value(brightness);
+  set_brightness_value(brightness);
 
   // Отправляем успешный ответ
   const char *resp = "Brightness received successfully";
@@ -343,6 +355,11 @@ httpd_uri_t uri_post_control = {.uri = "/api/control",
                                 .handler = control_handler,
                                 .user_ctx = NULL};
 
+httpd_uri_t uri_get_control = {.uri = "/api/control",
+                               .method = HTTP_GET,
+                               .handler = get_control_handler,
+                               .user_ctx = NULL};
+
 httpd_uri_t uri_favicon = {.uri = "/favicon.ico",
                            .method = HTTP_GET,
                            .handler = favicon_handler,
@@ -358,6 +375,7 @@ httpd_handle_t start_server() {
     httpd_register_uri_handler(server, &uri_favicon);
     httpd_register_uri_handler(server, &uri_post_upload);
     httpd_register_uri_handler(server, &uri_post_control);
+    httpd_register_uri_handler(server, &uri_get_control);
   }
   return server;
 }

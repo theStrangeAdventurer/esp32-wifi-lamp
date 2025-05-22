@@ -15,12 +15,15 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/event_groups.h"
 #include "freertos/task.h"
+#include "globals.h"
 #include "led_strip.h"
+#include "led_strip_wrapper.h"
 #include "lwip/err.h"
 #include "lwip/inet.h"
 #include "lwip/sys.h"
 #include "nvs.h"
 #include "nvs_flash.h"
+#include <stdlib.h>
 #include <string.h>
 
 /* The examples use WiFi configuration that you can set via project
@@ -32,10 +35,11 @@
 #define EXAMPLE_ESP_WIFI_SSID CONFIG_ESP_WIFI_SSID
 #define EXAMPLE_ESP_WIFI_PASS CONFIG_ESP_WIFI_PASSWORD
 #define EXAMPLE_ESP_MAXIMUM_RETRY CONFIG_ESP_MAXIMUM_RETRY
-#define NUM_LEDS 1
+
+#define RMT_LED_STRIP_GPIO_NUM 19
 /* server functions defined here >>  */
 void start_server();
-void init_led();
+/* led strip wrapper functions defined here >>  */
 
 /* FreeRTOS event group to signal when we are connected*/
 static EventGroupHandle_t s_wifi_event_group;
@@ -101,12 +105,10 @@ static void event_handler(void *arg, esp_event_base_t event_base,
     ESP_LOGI(TAG, "connect to the AP fail");
   } else if (event_base == IP_EVENT && event_id == IP_EVENT_STA_GOT_IP) {
     ip_event_got_ip_t *event = (ip_event_got_ip_t *)event_data;
-    char ip_str[16]; // Буфер для IP-адреса (минимум 16 байт для "255.255.255.255")
-                     // 
+    char ip_str[16]; // Буфер для IP-адреса (минимум 16 байт для
+                     // "255.255.255.255")
                      //
                      //
-
-    // Новый вариант использования esp_ip4addr_ntoa
     esp_ip4addr_ntoa(&event->ip_info.ip, ip_str, sizeof(ip_str));
     ESP_LOGI(TAG, "got ip:%s", ip_str);
 

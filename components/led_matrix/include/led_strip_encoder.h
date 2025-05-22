@@ -3,10 +3,11 @@
  *
  * SPDX-License-Identifier: Apache-2.0
  */
-#pragma once
+#ifndef __LED_STRIP_ENCODER_H__
+#define __LED_STRIP_ENCODER_H__
 
-#include <stdint.h>
 #include "driver/rmt_encoder.h"
+#include <stdint.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -16,7 +17,7 @@ extern "C" {
  * @brief Type of led strip encoder configuration
  */
 typedef struct {
-    uint32_t resolution; /*!< Encoder resolution, in Hz */
+  uint32_t resolution; /*!< Encoder resolution, in Hz */
 } led_strip_encoder_config_t;
 
 /**
@@ -29,8 +30,10 @@ typedef struct {
  *      - ESP_ERR_NO_MEM out of memory when creating led strip encoder
  *      - ESP_OK if creating encoder successfully
  */
-esp_err_t rmt_new_led_strip_encoder(const led_strip_encoder_config_t *config, rmt_encoder_handle_t *ret_encoder);
+esp_err_t rmt_new_led_strip_encoder(const led_strip_encoder_config_t *config,
+                                    rmt_encoder_handle_t *ret_encoder);
 
 #ifdef __cplusplus
 }
+#endif
 #endif

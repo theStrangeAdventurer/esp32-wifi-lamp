@@ -1,15 +1,20 @@
-body {
+html, body {
 	padding: 0;
 	margin: 0;
 }
 
 /* Slider.css */
 .app-container {
-	width: 100vw;
+	width: 100% - 2rem;
+	height: 100%;
+	position: absolute;
+	top: 0;
+	left: 0;
+	right: 0;
+	bottom: env(safe-area-inset-bottom, 50px);
 	padding-inline: 2rem;
 	padding-top: 2rem;
 	box-sizing: border-box;
-	height: 100vh;
 	background-color: #0a0f1b;
 	touch-action: none;
 	/* Отключаем стандартное поведение при касании */
