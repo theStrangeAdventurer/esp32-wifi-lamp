@@ -7,6 +7,7 @@
 #include "esp_vfs.h" // Для работы с файлами
 #include "globals.h"
 #include "http_parser.h"
+#include "led_strip_wrapper.h"
 #include "lwip/api.h"
 #include "lwip/err.h"
 #include "lwip/netdb.h"
@@ -28,9 +29,6 @@
 static const char *TAG = "http_server";
 static char *cached_index_html = NULL;
 static size_t cached_index_len = 0;
-
-// from led.c
-void set_brightness_value(uint8_t percent_value);
 
 esp_err_t init_mdns() {
   esp_err_t err = mdns_init();
@@ -281,7 +279,7 @@ esp_err_t get_control_handler(httpd_req_t *req) {
   char resp[128];
 
   snprintf(resp, sizeof(resp), "{ \"data\": { \"brightness\": %d } }",
-           lamp_state.brightness);
+           scale_0_255_to_0_100_fast(lamp_state.brightness));
   httpd_resp_send(req, resp, strlen(resp));
   return ESP_OK;
 }
@@ -329,8 +327,7 @@ esp_err_t control_handler(httpd_req_t *req) {
 
   set_brightness_value(brightness);
 
-  // Отправляем успешный ответ
-  const char *resp = "Brightness received successfully";
+  const char *resp = "{\"result\": true }";
   httpd_resp_send(req, resp, strlen(resp));
 
   return ESP_OK;
@@ -350,6 +347,7 @@ httpd_uri_t uri_post_upload = {.uri = "/upload",
                                .method = HTTP_POST,
                                .handler = upload_handler,
                                .user_ctx = NULL};
+
 httpd_uri_t uri_post_control = {.uri = "/api/control",
                                 .method = HTTP_POST,
                                 .handler = control_handler,

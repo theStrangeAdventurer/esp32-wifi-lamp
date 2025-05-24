@@ -3,61 +3,10 @@ import { useState, useRef, useEffect } from 'preact/hooks';
 
 import './styles.css';
 
-// Добавляем в начало файла
-let lastCallTime = 0;
-let throttleTimeout: any = null;
-let debounceTimeout: any = null;
-
-// Оптимальные задержки (в ms)
-const THROTTLE_DELAY = 200; // Макс. 5 запросов в секунду
-const DEBOUNCE_DELAY = 500; // Фиксируем окончание изменения
-
-const sendBrightness = async (brightness: number) => {
-  try {
-    const body = `brightness=${brightness}`;
-    
-    const response = await fetch('/api/control', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/x-www-form-urlencoded',
-      },
-      body: body,
-    });
-
-    if (!response.ok) throw new Error(`HTTP error! Status: ${response.status}`);
-    
-    console.log("Success:", await response.text());
-  } catch (error) {
-    console.error("Error:", error);
-  }
-};
-
-// Оптимизированный обработчик изменений
-const handleBrightnessChange = (currentValue: number) => {
-  const now = Date.now();
-  const roundedValue = Math.round(currentValue);
-
-  // Троттлинг: пропускаем, если не прошло достаточно времени
-  if (now - lastCallTime < THROTTLE_DELAY) {
-    clearTimeout(throttleTimeout);
-    throttleTimeout = setTimeout(() => {
-      sendBrightness(roundedValue);
-      lastCallTime = Date.now();
-    }, THROTTLE_DELAY - (now - lastCallTime));
-    return;
-  }
-
-  // Дебаунс: сбрасываем таймер окончания
-  clearTimeout(debounceTimeout);
-  debounceTimeout = setTimeout(() => {
-    sendBrightness(roundedValue);
-  }, DEBOUNCE_DELAY);
-
-  lastCallTime = now;
-};
-
 const App = () => {
 	const [value, setValue] = useState<number>(0);
+	const [locked, setLocked] = useState(false);
+	const lastSetVal = useRef(0);
 	const sliderRef = useRef<HTMLDivElement>(null);
 	const [isDragging, setIsDragging] = useState<boolean>(false);
 
@@ -108,11 +57,10 @@ const App = () => {
 		const fetchInitialValue = async () => {
 			try {
 				const resp = await fetch('/api/control');
-				const data = await resp.json();
-				console.log('initial data',  data);
-				setValue(10);
+				const { data: { brightness } } = await resp.json();
+				setValue(brightness);
 			} catch (error) {
-				console.error("Can't receive initial value");
+				console.error("Error while receive initial value", error);
 				setValue(10);
 			}
 		};
@@ -121,33 +69,40 @@ const App = () => {
 	}, []);
 
 	useEffect(() => {
-		// if (typeof value === 'number')
-		handleBrightnessChange(value);
-		// const sendBrightness = async () => {
-		// 	try {
-		// 		const brightness = Math.round(value); // Округляем значение яркости
-		// 		const body = `brightness=${brightness}`; // Формат application/x-www-form-urlencoded
-		//
-		// 		const response = await fetch('/api/control', {
-		// 			method: 'POST',
-		// 			headers: {
-		// 				'Content-Type': 'application/x-www-form-urlencoded',
-		// 			},
-		// 			body: body,
-		// 		});
-		//
-		// 		if (!response.ok) {
-		// 			throw new Error(`HTTP error! Status: ${response.status}`);
-		// 		}
-		//
-		// 		const result = await response.text();
-		// 		console.log("Result: ", result);
-		// 	} catch (error) {
-		// 		console.error("Error while sending brightness", error);
-		// 	}
-		// };
-		// sendBrightness();
-	}, [value]);
+		const brightness = Math.round(value); // Округляем значение яркости
+
+		const sendBrightness = async () => {
+			setLocked(true);
+			try {
+				const body = `brightness=${brightness}`; // Формат application/x-www-form-urlencoded
+				setLocked(true);
+
+				const response = await fetch('/api/control', {
+					method: 'POST',
+					headers: {
+						'Content-Type': 'application/x-www-form-urlencoded',
+					},
+					body: body,
+				});
+
+				if (!response.ok) {
+					throw new Error(`HTTP error! Status: ${response.status}`);
+				}
+
+				const result = await response.text();
+				console.log("Result: ", result);
+			} catch (error) {
+				console.error("Error while sending brightness", error);
+			} finally {
+				console.log('finally called', { brightness });
+				lastSetVal.current = brightness;
+				setLocked(false);
+			}
+		};
+
+		if (!locked && lastSetVal.current !== brightness)
+			sendBrightness();
+	}, [value, locked]);
 
 	// Добавляем глобальные обработчики для событий движения и отпускания
 	useEffect(() => {

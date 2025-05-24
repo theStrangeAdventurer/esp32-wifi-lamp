@@ -14,7 +14,7 @@
 
 #define LED_COLS 1
 #define LED_ROWS 1
-#define EXAMPLE_CHASE_SPEED_MS 100
+#define EXAMPLE_CHASE_SPEED_MS 20
 #define BIT_PER_ONE_ADDRESS_LED 24
 
 const char *TAG = "led_strip_wrapper.c";
@@ -26,11 +26,8 @@ typedef struct {
 } color_t;
 
 color_t get_warm_light(uint8_t brightness) {
-  // color_t res = {.g = brightness / 1.7, .b = brightness / 3, .r =
-  // brightness}; return res;
-  return (color_t){.r = brightness,
-                   .g = brightness * 0.588f, // ~1/1.7
-                   .b = brightness / 3};
+  return (color_t){
+      .r = brightness, .g = (brightness * 60) / 102, .b = brightness / 3};
 }
 
 static void set_pixel_color(uint8_t *p_pixels, int offset, int r, int g,
@@ -48,21 +45,27 @@ static uint8_t scale_0_100_to_0_255_fast(uint8_t value) {
   return (value * 255 + 50) / 100;
 }
 
+uint8_t scale_0_255_to_0_100_fast(uint8_t value) {
+  if (value > 255)
+    value = 255;
+  return (value * 100 + 127) / 255;
+}
+
 static void set_brightness_cb(uint8_t *p_pixels, int index) {
   color_t color = get_warm_light(lamp_state.brightness);
   set_pixel_color(lamp_state.p_pixels, index, color.r, color.g, color.b);
-  transmit_pixels_data(lamp_state.p_pixels, lamp_state.pixels_size);
 }
 
 static void update_led_strip_brightness() {
   traverse_matrix(lamp_state.p_pixels, set_brightness_cb,
                   EXAMPLE_CHASE_SPEED_MS, lamp_state.cols, lamp_state.rows);
+  transmit_pixels_data(lamp_state.p_pixels, lamp_state.pixels_size);
 }
 
 void set_brightness_value(uint8_t percent_value) {
   uint8_t result_value = scale_0_100_to_0_255_fast(percent_value);
-  ESP_LOGI(TAG, "Setting light value from: %d to %d", percent_value,
-           result_value);
+  if (result_value == lamp_state.brightness)
+    return; // Пропуск если не изменилось
   lamp_state.brightness = result_value;
   update_led_strip_brightness();
 }
