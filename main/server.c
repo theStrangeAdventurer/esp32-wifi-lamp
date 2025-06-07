@@ -150,7 +150,7 @@ esp_err_t upload_handler(httpd_req_t *req) {
   }
 
   char filename[128] = {0};
-  FILE *fd = NULL;
+  int fd = -1; // Use file descriptor instead of FILE*
   const char *fail_resp = "{\"result\": false}";
   const char *success_resp = "{\"result\": true}";
   char boundary[70] = {0};
@@ -186,9 +186,13 @@ esp_err_t upload_handler(httpd_req_t *req) {
   while (remaining > 0 && !file_complete) {
     int received = httpd_req_recv(req, buf, MIN(remaining, UPLOAD_BUFFER_SIZE));
     if (received <= 0) {
-      ESP_LOGE(TAG, "Receive failed or connection closed");
-      if (fd)
-        fclose(fd);
+      if (received == HTTPD_SOCK_ERR_TIMEOUT) {
+        ESP_LOGE(TAG, "Receive timeout");
+      } else {
+        ESP_LOGE(TAG, "Receive failed or connection closed");
+      }
+      if (fd != -1)
+        close(fd);
       free(buf);
       httpd_resp_send(req, fail_resp, strlen(fail_resp));
       return ESP_FAIL;
@@ -216,8 +220,8 @@ esp_err_t upload_handler(httpd_req_t *req) {
       // Открываем файл в SPIFFS
       char filepath[256];
       snprintf(filepath, sizeof(filepath), "/spiffs/%s", filename);
-      fd = fopen(filepath, "wb");
-      if (!fd) {
+      fd = open(filepath, O_WRONLY | O_CREAT | O_TRUNC, 0666);
+      if (fd == -1) {
         ESP_LOGE(TAG, "Failed to open file %s", filepath);
         free(buf);
         httpd_resp_send(req, fail_resp, strlen(fail_resp));
@@ -245,21 +249,21 @@ esp_err_t upload_handler(httpd_req_t *req) {
     if (boundary_pos) {
       // Нашли конец файла
       size_t to_write = boundary_pos - data_start - 2; // Учитываем \r\n
-      fwrite(data_start, 1, to_write, fd);
+      write(fd, data_start, to_write);
       total_written += to_write;
       file_complete = true;
       ESP_LOGI(TAG, "File end detected at %d bytes", (int)to_write);
     } else {
       // Записываем весь чанк (если boundary не найден)
-      fwrite(data_start, 1, data_len, fd);
+      write(fd, data_start, data_len);
       total_written += data_len;
     }
 
     remaining -= received;
   }
 
-  if (fd)
-    fclose(fd);
+  if (fd != -1)
+    close(fd);
   free(buf);
 
   if (file_complete) {
@@ -366,6 +370,10 @@ httpd_uri_t uri_favicon = {.uri = "/favicon.ico",
 httpd_handle_t start_server() {
   init_mdns();
   httpd_config_t config = HTTPD_DEFAULT_CONFIG();
+  config.max_open_sockets = 4;    // Limit concurrent connections
+  config.lru_purge_enable = true; // Clean up least recently used connections
+  config.recv_wait_timeout = 10;  // Timeout in seconds
+  config.send_wait_timeout = 10;
   httpd_handle_t server = NULL;
 
   if (httpd_start(&server, &config) == ESP_OK) {

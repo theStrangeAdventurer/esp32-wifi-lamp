@@ -36,7 +36,6 @@
 #define EXAMPLE_ESP_WIFI_PASS CONFIG_ESP_WIFI_PASSWORD
 #define EXAMPLE_ESP_MAXIMUM_RETRY CONFIG_ESP_MAXIMUM_RETRY
 
-#define RMT_LED_STRIP_GPIO_NUM 19
 /* server functions defined here >>  */
 void start_server();
 /* led strip wrapper functions defined here >>  */
@@ -107,8 +106,6 @@ static void event_handler(void *arg, esp_event_base_t event_base,
     ip_event_got_ip_t *event = (ip_event_got_ip_t *)event_data;
     char ip_str[16]; // Буфер для IP-адреса (минимум 16 байт для
                      // "255.255.255.255")
-                     //
-                     //
     esp_ip4addr_ntoa(&event->ip_info.ip, ip_str, sizeof(ip_str));
     ESP_LOGI(TAG, "got ip:%s", ip_str);
 
@@ -133,7 +130,6 @@ void wifi_init_sta(void) {
   // 4. Создание STA интерфейса (после инициализации WiFi)
   esp_netif_t *sta_netif = esp_netif_create_default_wifi_sta();
   assert(sta_netif);
-
   // 5. Установка hostname
   ESP_ERROR_CHECK(esp_netif_set_hostname(sta_netif, "esp32-smart-lamp"));
 
@@ -142,13 +138,13 @@ void wifi_init_sta(void) {
       WIFI_EVENT, ESP_EVENT_ANY_ID, &event_handler, NULL, NULL));
   ESP_ERROR_CHECK(esp_event_handler_instance_register(
       IP_EVENT, IP_EVENT_STA_GOT_IP, &event_handler, NULL, NULL));
-
   // Конфигурация WiFi
   wifi_config_t wifi_config = {
       .sta =
           {
               .ssid = EXAMPLE_ESP_WIFI_SSID,
               .password = EXAMPLE_ESP_WIFI_PASS,
+              // .scan_method = WIFI_ALL_CHANNEL_SCAN,
               .threshold.authmode = WIFI_AUTH_WPA2_PSK,
           },
   };

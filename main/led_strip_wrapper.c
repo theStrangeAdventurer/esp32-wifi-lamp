@@ -10,7 +10,7 @@
 #define RMT_LED_STRIP_RESOLUTION_HZ                                            \
   10000000 // 10MHz resolution, 1 tick = 0.1us (led strip needs a high
            // resolution)
-#define RMT_LED_STRIP_GPIO_NUM 19
+#define RMT_LED_STRIP_GPIO_NUM 5
 
 #define LED_COLS 1
 #define LED_ROWS 1
@@ -91,4 +91,6 @@ void init_led() {
   ESP_LOGI(TAG, "init_led with brightness: %d", lamp_state.brightness);
   init_rmt_encoder(RMT_LED_STRIP_GPIO_NUM);
   reset_pixels_array(lamp_state.p_pixels, lamp_state.pixels_size);
+  // set initial brigthness
+  set_brightness_value(10);
 }
