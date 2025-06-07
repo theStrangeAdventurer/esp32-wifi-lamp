@@ -1,5 +1,7 @@
 #include "globals.h"
 #include <unistd.h>
+
+SemaphoreHandle_t lamp_state_mutex = NULL;
 // Определение глобальной переменной (память выделяется здесь)
 led_strip_state_t lamp_state = {.is_initiated = 0,
                                 .gpio_num = -1,

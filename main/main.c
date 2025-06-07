@@ -175,11 +175,18 @@ void wifi_init_sta(void) {
     ESP_LOGE(TAG, "UNEXPECTED EVENT");
   }
 }
-
+void init_lamp_mutex(void) {
+  lamp_state_mutex = xSemaphoreCreateMutex();
+  if (lamp_state_mutex == NULL) {
+    // Обработка ошибки создания мьютекса
+    ESP_LOGE("LAMP", "Failed to create mutex");
+  }
+}
 void app_main() {
   ESP_ERROR_CHECK(nvs_flash_init());
 
   ESP_LOGI(TAG, "ESP_WIFI_MODE_STA");
   wifi_init_sta();
+  init_lamp_mutex();
   init_led();
 }

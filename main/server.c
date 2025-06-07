@@ -281,9 +281,13 @@ esp_err_t upload_handler(httpd_req_t *req) {
 
 esp_err_t get_control_handler(httpd_req_t *req) {
   char resp[128];
-
+  uint8_t brightness = 0;
+  if (xSemaphoreTake(lamp_state_mutex, pdMS_TO_TICKS(100)) == pdTRUE) {
+    brightness = lamp_state.brightness;
+    xSemaphoreGive(lamp_state_mutex);
+  }
   snprintf(resp, sizeof(resp), "{ \"data\": { \"brightness\": %d } }",
-           scale_0_255_to_0_100_fast(lamp_state.brightness));
+           scale_0_255_to_0_100_fast(brightness));
   httpd_resp_send(req, resp, strlen(resp));
   return ESP_OK;
 }

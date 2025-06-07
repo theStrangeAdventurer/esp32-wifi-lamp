@@ -1,6 +1,8 @@
 #include "driver/rmt_encoder.h"
 #include "driver/rmt_tx.h"
 #include "esp_log.h"
+#include "freertos/FreeRTOS.h"
+#include "freertos/semphr.h"
 #include "globals.h"
 #include "led_strip.h"
 #include "mdns.h"
@@ -63,34 +65,41 @@ static void update_led_strip_brightness() {
 }
 
 void set_brightness_value(uint8_t percent_value) {
-  uint8_t result_value = scale_0_100_to_0_255_fast(percent_value);
-  if (result_value == lamp_state.brightness)
-    return; // Пропуск если не изменилось
-  lamp_state.brightness = result_value;
-  update_led_strip_brightness();
+  if (xSemaphoreTake(lamp_state_mutex, pdMS_TO_TICKS(100)) == pdTRUE) {
+    uint8_t result_value = scale_0_100_to_0_255_fast(percent_value);
+    if (result_value != lamp_state.brightness) {
+      lamp_state.brightness = result_value;
+      update_led_strip_brightness();
+    }
+    xSemaphoreGive(lamp_state_mutex);
+  } else {
+    ESP_LOGW("LAMP", "Failed to take mutex");
+  }
 }
 
 void init_led() {
-  if (lamp_state.is_initiated) {
-    ESP_LOGE(TAG, "Lamp state is already initiated");
-    return;
+  if (xSemaphoreTake(lamp_state_mutex, pdMS_TO_TICKS(100)) == pdTRUE) {
+    if (lamp_state.is_initiated) {
+      ESP_LOGE(TAG, "Lamp state is already initiated");
+      return;
+    }
+    lamp_state.is_initiated = 1;
+    lamp_state.cols = LED_COLS;
+    lamp_state.rows = LED_ROWS;
+    lamp_state.gpio_num = RMT_LED_STRIP_GPIO_NUM;
+    lamp_state.pixels_size = LED_ROWS * LED_COLS * BIT_PER_ONE_ADDRESS_LED;
+    lamp_state.p_pixels = malloc(lamp_state.pixels_size);
+
+    if (!lamp_state.p_pixels) {
+      ESP_LOGE(TAG, "Pixels memory allocation error");
+      return;
+    }
+
+    ESP_LOGI(TAG, "init_led with brightness: %d", lamp_state.brightness);
+    init_rmt_encoder(RMT_LED_STRIP_GPIO_NUM);
+    reset_pixels_array(lamp_state.p_pixels, lamp_state.pixels_size);
+    xSemaphoreGive(lamp_state_mutex);
   }
-
-  lamp_state.is_initiated = 1;
-  lamp_state.cols = LED_COLS;
-  lamp_state.rows = LED_ROWS;
-  lamp_state.gpio_num = RMT_LED_STRIP_GPIO_NUM;
-  lamp_state.pixels_size = LED_ROWS * LED_ROWS * BIT_PER_ONE_ADDRESS_LED;
-  lamp_state.p_pixels = malloc(lamp_state.pixels_size);
-
-  if (!lamp_state.p_pixels) {
-    ESP_LOGE(TAG, "Pixels memory allocation error");
-    return;
-  }
-
-  ESP_LOGI(TAG, "init_led with brightness: %d", lamp_state.brightness);
-  init_rmt_encoder(RMT_LED_STRIP_GPIO_NUM);
-  reset_pixels_array(lamp_state.p_pixels, lamp_state.pixels_size);
   // set initial brigthness
   set_brightness_value(10);
 }
